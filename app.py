@@ -60,48 +60,81 @@ def index():
             .progress { width: 100%; height: 20px; background: #ddd; border-radius: 10px; margin: 20px 0; }
             .progress-bar { width: 0%; height: 100%; background: #4CAF50; border-radius: 10px; transition: width 0.3s; }
             #status { margin: 10px 0; }
+            .file-list { margin: 10px 0; }
+            .file-item { display: flex; align-items: center; margin: 5px 0; padding: 5px; background: #fff; border-radius: 4px; }
+            .file-progress { flex: 1; margin: 0 10px; }
+            .file-status { min-width: 100px; }
+            .total-progress { margin-top: 20px; }
+            .total-progress-label { margin-bottom: 5px; font-weight: bold; }
         </style>
     </head>
     <body>
         <div class="container">
             <h1>文本转有声书</h1>
-            <form action="/synthesize" method="post" enctype="multipart/form-data">
+            <form id="uploadForm">
                 <p>请上传TXT文本文件：</p>
-                <input type="file" name="file" accept=".txt" required>
+                <input type="file" name="files" accept=".txt" multiple required>
                 <button type="submit">开始转换</button>
             </form>
-            <div class="progress">
-                <div class="progress-bar" id="progressBar"></div>
+            <div class="file-list" id="fileList"></div>
+            <div class="total-progress">
+                <div class="total-progress-label">总体进度：<span id="totalStatus">准备就绪</span></div>
+                <div class="progress">
+                    <div class="progress-bar" id="totalProgressBar"></div>
+                </div>
             </div>
-            <div id="status">准备就绪</div>
         </div>
         <script>
-            function checkProgress() {
-                fetch('/progress')
-                    .then(response => response.json())
-                    .then(data => {
-                        document.getElementById('progressBar').style.width = data.progress + '%';
-                        document.getElementById('status').textContent = data.status;
-                        if (data.progress < 100) {
-                            setTimeout(checkProgress, 1000);
-                        }
-                    });
+            let fileQueue = [];
+            let currentProcessingIndex = -1;
+            let totalFiles = 0;
+
+            function createFileProgressElement(file, index) {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.innerHTML = `
+                    <div>${file.name}</div>
+                    <div class="progress file-progress">
+                        <div class="progress-bar" id="progressBar_${index}"></div>
+                    </div>
+                    <div class="file-status" id="status_${index}">等待处理</div>
+                `;
+                return fileItem;
             }
-            
-            document.querySelector('form').onsubmit = function(e) {
-                e.preventDefault();
-                const formData = new FormData(this);
-                document.getElementById('status').textContent = '开始上传文件...';
-                document.getElementById('progressBar').style.width = '0%';
-                
+
+            function updateTotalProgress() {
+                if (totalFiles === 0) return;
+                const completedFiles = fileQueue.filter(f => f.completed).length;
+                const currentProgress = currentProcessingIndex >= 0 ? 
+                    parseInt(document.getElementById(`progressBar_${currentProcessingIndex}`).style.width) : 0;
+                const totalProgress = ((completedFiles * 100) + (currentProgress / 100)) / totalFiles;
+                document.getElementById('totalProgressBar').style.width = `${totalProgress}%`;
+                document.getElementById('totalStatus').textContent = 
+                    `处理中 ${completedFiles}/${totalFiles} (${Math.round(totalProgress)}%)`;
+            }
+
+            function processNextFile() {
+                if (currentProcessingIndex >= 0) {
+                    fileQueue[currentProcessingIndex].completed = true;
+                }
+                currentProcessingIndex++;
+                if (currentProcessingIndex >= fileQueue.length) {
+                    document.getElementById('totalStatus').textContent = '全部处理完成';
+                    return;
+                }
+
+                const file = fileQueue[currentProcessingIndex].file;
+                const formData = new FormData();
+                formData.append('file', file);
+
+                document.getElementById(`status_${currentProcessingIndex}`).textContent = '处理中...';
+
                 fetch('/synthesize', {
                     method: 'POST',
                     body: formData
                 })
                 .then(response => {
-                    if (!response.ok) {
-                        throw new Error('上传失败');
-                    }
+                    if (!response.ok) throw new Error('上传失败');
                     const contentDisposition = response.headers.get('Content-Disposition');
                     let filename = '';
                     const filenameMatch = /filename\*=UTF-8''([^;]+)/.exec(contentDisposition);
@@ -121,12 +154,57 @@ def index():
                     a.click();
                     window.URL.revokeObjectURL(url);
                     document.body.removeChild(a);
+                    document.getElementById(`status_${currentProcessingIndex}`).textContent = '完成';
+                    processNextFile();
                 })
                 .catch(error => {
-                    document.getElementById('status').textContent = '处理失败: ' + error.message;
+                    document.getElementById(`status_${currentProcessingIndex}`).textContent = 
+                        `处理失败: ${error.message}`;
+                    processNextFile();
                 });
-                
-                setTimeout(checkProgress, 1000);
+
+                checkProgress();
+            }
+
+            function checkProgress() {
+                if (currentProcessingIndex >= 0 && currentProcessingIndex < fileQueue.length) {
+                    fetch('/progress')
+                        .then(response => response.json())
+                        .then(data => {
+                            const progressBar = document.getElementById(
+                                `progressBar_${currentProcessingIndex}`);
+                            if (progressBar) {
+                                progressBar.style.width = data.progress + '%';
+                                document.getElementById(
+                                    `status_${currentProcessingIndex}`).textContent = data.status;
+                                updateTotalProgress();
+                                if (data.progress < 100) {
+                                    setTimeout(checkProgress, 1000);
+                                }
+                            }
+                        });
+                }
+            }
+
+            document.getElementById('uploadForm').onsubmit = function(e) {
+                e.preventDefault();
+                const files = document.querySelector('input[type=file]').files;
+                if (files.length === 0) return;
+
+                fileQueue = Array.from(files).map(file => ({ file, completed: false }));
+                totalFiles = files.length;
+                currentProcessingIndex = -1;
+
+                const fileList = document.getElementById('fileList');
+                fileList.innerHTML = '';
+                fileQueue.forEach((item, index) => {
+                    fileList.appendChild(createFileProgressElement(item.file, index));
+                });
+
+                document.getElementById('totalStatus').textContent = '准备处理...';
+                document.getElementById('totalProgressBar').style.width = '0%';
+
+                processNextFile();
             };
         </script>
     </body>
