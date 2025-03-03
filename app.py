@@ -102,13 +102,21 @@ def index():
                     if (!response.ok) {
                         throw new Error('上传失败');
                     }
-                    return response.blob();
+                    const contentDisposition = response.headers.get('Content-Disposition');
+                    let filename = '';
+                    const filenameMatch = /filename\*=UTF-8''([^;]+)/.exec(contentDisposition);
+                    if (filenameMatch) {
+                        filename = decodeURIComponent(filenameMatch[1]);
+                    } else {
+                        filename = contentDisposition.split('filename=')[1].replace(/"/g, '');
+                    }
+                    return response.blob().then(blob => ({ blob, filename }));
                 })
-                .then(blob => {
+                .then(({ blob, filename }) => {
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = 'audiobook.mp3';
+                    a.download = filename;
                     document.body.appendChild(a);
                     a.click();
                     window.URL.revokeObjectURL(url);
@@ -190,7 +198,9 @@ def synthesize():
         progress["status"] = "处理完成"
         progress["progress"] = 100
         
-        return send_file(output_file.name, as_attachment=True, download_name='audiobook.mp3')
+        # 使用上传的txt文件名（不含扩展名）作为下载文件名
+        download_filename = os.path.splitext(file.filename)[0] + '.mp3'
+        return send_file(output_file.name, as_attachment=True, download_name=download_filename)
     
     finally:
         # 清理临时文件
