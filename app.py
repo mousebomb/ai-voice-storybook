@@ -27,9 +27,10 @@ def split_text(text, max_length=100):
     current_sentence = ""
     
     text = text.strip()
+    text = text.replace('\n\n', '。')
     for char in text:
         current_sentence += char
-        if char in '。！？.!?' and len(current_sentence) <= max_length:
+        if char in '。！？；.!?' or len(current_sentence) > max_length:
             if current_sentence.strip():
                 sentences.append(current_sentence.strip())
             current_sentence = ""
@@ -151,6 +152,7 @@ def synthesize():
     # 分割文本
     sentences = split_text(text)
     total_sentences = len(sentences)
+    print(f"总句子数: {total_sentences}")
     
     # 加载提示语音
     prompt_speech_16k = load_wav('./asset/zero_shot_prompt.wav', 16000)
