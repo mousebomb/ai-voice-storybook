@@ -82,7 +82,36 @@ def index():
                     });
             }
             
-            document.querySelector('form').onsubmit = function() {
+            document.querySelector('form').onsubmit = function(e) {
+                e.preventDefault();
+                const formData = new FormData(this);
+                document.getElementById('status').textContent = '开始上传文件...';
+                document.getElementById('progressBar').style.width = '0%';
+                
+                fetch('/synthesize', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('上传失败');
+                    }
+                    return response.blob();
+                })
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'audiobook.mp3';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                })
+                .catch(error => {
+                    document.getElementById('status').textContent = '处理失败: ' + error.message;
+                });
+                
                 setTimeout(checkProgress, 1000);
             };
         </script>
