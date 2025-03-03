@@ -27,7 +27,6 @@ def split_text(text, max_length=100):
     current_sentence = ""
     
     text = text.strip()
-    text = text.replace('\n\n', '。')
     for char in text:
         current_sentence += char
         if char in '。！？；.!?' or len(current_sentence) > max_length:
