@@ -145,6 +145,12 @@ def synthesize():
         output_file = tempfile.NamedTemporaryFile(suffix='.mp3', delete=False)
         combined_audio.export(output_file.name, format='mp3')
         
+        # 在服务器上保存一份副本
+        os.makedirs('output', exist_ok=True)
+        output_filename = os.path.splitext(file.filename)[0] + '.mp3'
+        server_output_path = os.path.join('output', output_filename)
+        combined_audio.export(server_output_path, format='mp3')
+        
         progress["status"] = "处理完成"
         progress["progress"] = 100
         
