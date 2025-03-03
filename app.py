@@ -6,6 +6,7 @@ from pydub import AudioSegment
 from tqdm import tqdm
 import numpy as np
 
+print(tempfile.gettempdir())
 
 sys.path.append('third_party/Matcha-TTS')
 from cosyvoice.cli.cosyvoice import CosyVoice2
@@ -19,19 +20,24 @@ cosyvoice = CosyVoice2('pretrained_models/CosyVoice2-0.5B', load_jit=False, load
 
 def split_text(text, max_length=100):
     """将文本分割成短句子"""
+    if not text or len(text.strip()) == 0:
+        return []
+    
     sentences = []
     current_sentence = ""
     
+    text = text.strip()
     for char in text:
         current_sentence += char
         if char in '。！？.!?' and len(current_sentence) <= max_length:
-            sentences.append(current_sentence.strip())
+            if current_sentence.strip():
+                sentences.append(current_sentence.strip())
             current_sentence = ""
     
-    if current_sentence:
+    if current_sentence and current_sentence.strip():
         sentences.append(current_sentence.strip())
     
-    return sentences
+    return sentences if sentences else [text[:max_length]]
 
 def merge_audio_files(audio_files):
     """合并多个音频文件"""
